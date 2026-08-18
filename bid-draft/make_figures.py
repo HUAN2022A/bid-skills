@@ -16,7 +16,11 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch, Polygon
 from matplotlib import font_manager
 
-plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "SimSun"]
+plt.rcParams["font.sans-serif"] = [
+    "SimHei", "Microsoft YaHei", "SimSun",            # Windows
+    "Noto Sans CJK SC", "WenQuanYi Micro Hei",        # Linux
+    "PingFang SC", "Hiragino Sans GB", "Arial Unicode MS",  # macOS
+]
 plt.rcParams["axes.unicode_minus"] = False
 
 # 统一配色
