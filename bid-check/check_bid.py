@@ -55,6 +55,105 @@ def chapter_sort_key(name):
     return tuple(int(x) for x in m.group(1).rstrip(".").split("."))
 
 
+# ── 技术需求关键词自动提取 ──
+# 从 requirement_original 原文提取探测关键词，替代硬编码 kw_map。
+# 优先级：数字+单位 > 品牌/型号 > 领域术语（引号词+高频词）> 兜底（原文前6字）。
+
+
+def _extract_domain_terms(titles, req_texts):
+    """从 outline 章节标题 + tech_requirements 原文自动提取领域术语。
+
+    简化策略（无停用词表、无 n-gram 统计）：
+    1. 引号词：招标文件里"xxx"或「xxx」包围的词，通常是重要术语（如"技术偏离表""差异表"）；
+    2. 高频词：在 tech_requirements 里出现 >=2 次的 2-4 字中文词，取 top 10。
+    """
+    from collections import Counter
+
+    terms = []
+    # 1. 引号词（最特异，招标文件作者主动强调的）
+    all_text = " ".join(titles + req_texts)
+    quoted = re.findall(r'["「]([^"」]{2,10})["」]', all_text)
+    terms.extend(quoted)
+    # 2. 高频词：tech_requirements 里出现 >=2 次的 2-4 字中文词
+    chars = re.findall(r"[一-鿿]", " ".join(req_texts))
+    bigrams = Counter()
+    for n in (2, 3, 4):
+        for i in range(len(chars) - n + 1):
+            ng = "".join(chars[i:i + n])
+            bigrams[ng] += 1
+    # 取 top 10，过滤掉纯通用词（项目/技术/方案/系统等）
+    common = {"项目", "技术", "方案", "系统", "研究", "设计", "实施", "服务", "说明", "响应",
+              "要求", "措施", "管理", "组织", "保证", "质量", "安全", "进度", "内容", "范围",
+              "方法", "手段", "总体", "部署", "现场", "改造", "设备", "选型", "参数", "性能",
+              "指标", "承诺", "分析", "应对", "风险", "案例", "应用", "场景", "成果", "提供",
+              "方式", "数量", "提交", "条件", "能力", "水平", "基础", "理解", "认识", "概况",
+              "认知", "背景", "意义", "现状", "趋势", "全面", "深度", "实质", "声明", "投标",
+              "招标", "机器人", "自动", "智能", "基于", "相关", "其他", "各类", "各项", "详细",
+              "具体", "针对", "本项目", "目的", "建议", "计划", "进行", "完成", "确保", "具备",
+              "应能", "可以", "需要", "包括", "以及", "并且", "或者", "如果", "因为", "所以",
+              "但是", "然而", "因此", "这个", "那个", "什么", "怎么", "为什么", "哪里", "哪些",
+              "多少", "没有", "不是", "就是", "资料", "安装", "清洁", "油漆", "包装", "运输",
+              "储存", "调试", "试验", "验收", "监造", "检验", "标准", "制造", "图纸", "文件",
+              "交付", "供货", "范围", "品牌", "控制", "检测", "识别", "机器", "器人", "钩机",
+              "翻车", "车机", "制系", "制系统", "钩机器", "标人", "投标人", "招标人", "本项",
+              "术偏", "离表", "技术偏", "术偏离", "目研", "项目研", "目研究", "核心", "时间",
+              "偏离表", "技术偏离", "术偏离表", "项目研究", "项目实施", "投标方", "招标方",
+              "规范", "规范书", "技术规范", "技术规范书", "控制系", "控制系统", "摘钩机",
+              "摘钩机器", "摘钩机器人", "测识", "检测识", "测识别", "检测识别", "钩机器人",
+              "正钩机器", "复钩机器", "人技术", "与备品", "服务计划", "项目实施组织", "以上",
+              "成功", "功率", "机械", "械臂", "扣除", "成功率", "机械臂", "车型", "能够",
+              "论文", "授权", "标方", "作业", "所有", "小于", "产品", "运行", "满足", "工作",
+              "选用", "或同", "同等", "万元", "扣除万", "除万元", "扣除万元", "对本", "关键",
+              "目实", "项目实", "目实施", "或同等", "范书", "保期", "车钩", "有机", "室外",
+              "钩复", "采用", "及以", "项目的", "钩成", "率以", "人所", "期刊", "刊论",
+              "最终", "未授", "权扣", "元项", "钩成功", "功率以", "等品", "牌产", "电缆",
+              "不小", "所有机", "有机器", "钩复钩", "及以上", "同等品", "等品牌", "品牌产",
+              "牌产品", "不小于", "所有机器", "有机器人", "率以上", "标人所", "期刊论",
+              "刊论文", "未授权", "授权扣", "权扣除", "万元项", "钩成功率", "成功率以",
+              "功率以上", "期刊论文", "术方", "技术方", "术方案", "技术方案", "正钩机",
+              "人控", "器人控", "人控制", "机器人控", "器人控制", "未授权扣", "授权扣除",
+              "权扣除万", "除万元项", "人控制系", "机系", "车机系", "机系统", "翻车机系",
+              "除万", "或同等品", "同等品牌", "等品牌产", "品牌产品", "车机系统", "品备",
+              "备品备", "品备件", "标时", "供的", "投标时", "提供的", "至少", "正常",
+              "备品", "备件", "备品备件", "偏差", "元件", "钩正", "人系", "敞车"}
+    high_freq = [w for w, c in bigrams.most_common(30) if c >= 2 and w not in common]
+    terms.extend(high_freq[:10])
+    # 去重
+    seen = set()
+    return [t for t in terms if not (t in seen or seen.add(t))]
+
+
+def extract_keywords(text, domain_terms=None):
+    """从单条技术需求原文提取探测关键词列表（按特异度排序）。
+
+    domain_terms: 自动统计生成的领域术语列表，为 None 时退化为无领域术语模式。
+    """
+    kws = []
+    # 1. 数字+单位组合（最特异）：97%、10秒、400N、120公斤、2m、90天、24个月、3000N、±1mm、≥98%、≤85 dB(A)
+    num_unit = re.findall(
+        r"\d+(?:\.\d+)?\s*(?:%|秒|分钟|小时|天|个月|年|N|kN|kg|公斤|吨|m|mm|cm|km|"
+        r"℃|dB|kV|V|A|kW|MW|GHz|MHZ|GHZ|G|GB|T|TB|核|线程|项|篇|套|节|寸)",
+        text)
+    kws.extend(num_unit)
+    # 2. 品牌/型号（英文+数字混合、纯大写英文、常见品牌名）：
+    #    RTX4060、GDDR6、IP65、DCS、PLC、P&I、ZC-YJV22、C70EH-A、SKF、FAG、ABB、SIEMENS、ASCO、FESTO、SMC
+    brand_model = re.findall(r"[A-Z][A-Za-z0-9&]*(?:[-/][A-Za-z0-9.]+)*", text)
+    # 过滤掉单字母和纯通用词（A、B、I、O 等）
+    brand_model = [b for b in brand_model if len(b) >= 2 and b not in ("SSD", "HDD", "CPU", "CUDA")]
+    kws.extend(brand_model)
+    # 3. 领域术语（自动统计生成，非硬编码）
+    if domain_terms:
+        for t in domain_terms:
+            if t in text:
+                kws.append(t)
+    # 4. 兜底：如果前面都没提到，取原文前6字
+    if not kws:
+        kws = [text.strip()[:6]]
+    # 去重
+    seen2 = set()
+    return [k for k in kws if not (k in seen2 or seen2.add(k))]
+
+
 # ── 可自动修复项：checker/fixer 配对 ──
 
 def check_covers(chapters, o_chapters, ws, fix):
@@ -265,26 +364,17 @@ def main():
     print("| id | 要求摘要 | 关键词 | 命中章节 | 状态 |")
     print("|---|---|---|---|---|")
     all_text = {fn: info["text"] for fn, info in chapters.items()}
-    kw_map = {
-        "97%": ["97%"], "10秒": ["10秒", "10 秒"], "400N": ["400N", "120kg", "120公斤"],
-        "臂展": ["臂展"], "3000N": ["3000N"], "99%": ["99%"], "90天": ["90天", "90 天"],
-        "台达": ["台达", "西门子", "施耐德"], "DCS": ["DCS", "某国产DCS品牌", "GN"],
-        "对侧": ["对侧"], "专利": ["发明专利", "专利"], "24个月": ["24个月", "24 个月"],
-        "偏离": ["偏离"], "RTX4060": ["RTX4060", "服务器"],
-    }
+    # 自动统计领域术语（从 outline 标题 + tech_requirements 原文）
+    o_titles = [c.get("title", "") for c in o_chapters]
+    req_texts = [(tr.get("requirement_original") or "") for tr in tech_reqs]
+    domain_terms = _extract_domain_terms(o_titles, req_texts)
     for tr in tech_reqs:
         tid = str(tr.get("id"))
         orig = (tr.get("requirement_original") or "").strip().replace("\n", " ")[:30]
-        kws = []
-        for k, v in kw_map.items():
-            if k in (tr.get("requirement_original") or ""):
-                kws = v
-                break
-        if not kws:
-            kws = [orig[:6]]
+        kws = extract_keywords(tr.get("requirement_original") or "", domain_terms)
         hits = [fn for fn, txt in all_text.items() if any(k in txt for k in kws)]
         status = "✅" if hits else "❌ 未命中"
-        print(f"| {tid} | {orig}… | {'/'.join(kws[:2])} | {'、'.join(hits[:3]) or '—'} | {status} |")
+        print(f"| {tid} | {orig}… | {'/'.join(kws[:3])} | {'、'.join(hits[:3]) or '—'} | {status} |")
     print()
 
     # ── 3. 废标风险（技术卷相关）──
