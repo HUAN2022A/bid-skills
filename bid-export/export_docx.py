@@ -39,13 +39,24 @@ def setup_styles(doc):
     pf.line_spacing = 1.3
 
     # 标题样式
-    for lvl, (size, cn) in {1: (16, "黑体"), 2: (14, "黑体"), 3: (13, "黑体"), 4: (12, "黑体")}.items():
+    for lvl, (size, cn) in {1: (14, "宋体"), 2: (14, "黑体"), 3: (13, "黑体"), 4: (12, "黑体")}.items():
         st = doc.styles[f"Heading {lvl}"]
         st.font.size = Pt(size)
         st.font.bold = True
         st.font.color.rgb = RGBColor(0, 0, 0)
         st.font.name = "Times New Roman"
         st.element.rPr.rFonts.set(qn("w:eastAsia"), cn)
+
+    # TOC 目录样式（宋体小四 12pt）
+    from docx.enum.style import WD_STYLE_TYPE
+    for lvl in (1, 2, 3):
+        try:
+            st = doc.styles.add_style(f"TOC {lvl}", WD_STYLE_TYPE.PARAGRAPH)
+        except ValueError:
+            st = doc.styles[f"TOC {lvl}"]
+        st.font.name = "Times New Roman"
+        st.font.size = Pt(12)  # 小四
+        st.element.rPr.rFonts.set(qn("w:eastAsia"), "宋体")
 
 
 def add_toc(doc):
@@ -116,6 +127,9 @@ def add_table(doc, rows):
             c.text = ""
             p = c.paragraphs[0]
             add_runs_with_bold(p, cell.strip())
+            # 表格文字统一宋体 10.5pt（五号）
+            for r in p.runs:
+                r.font.size = Pt(10.5)
             if i == 0:
                 for r in p.runs:
                     r.bold = True
@@ -178,9 +192,9 @@ def render_markdown(doc, md_text, base_id="", ws=None):
             i += 1
             continue
         if re.match(r"^\s*\d+\.\s+", line):
-            text = re.sub(r"^\s*\d+\.\s+", "", line)
-            p = doc.add_paragraph(style="List Number")
-            add_runs_with_bold(p, text)
+            # 保留 markdown 原始编号文本，不用 List Number 样式（避免全文连续编号）
+            p = doc.add_paragraph()
+            add_runs_with_bold(p, line)
             i += 1
             continue
         # 普通段落（首行缩进）

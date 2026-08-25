@@ -12,18 +12,22 @@
 |---|---|---|
 | `bid-parse` | 解析招标文件（pdfplumber PDF 直读含表格还原 / docx） | `tender-analysis.yaml` + `招标项目分析报告.docx` |
 | `bid-outline` | 设计应答大纲（**全流程唯一人工确认点**） | `bid-outline.yaml` |
+| `bid-recall` | 从历史标书（人工真实投标 docx）召回相似章节与图片：章节全文 md 化 + 图片库 + 两段式召回（脚本粗筛 + LLM 精筛），**含人工确认点** | `recall-pack.yaml`（打底章节 + 替换表 + 图片清单） |
 | `company-knowledge` | 公司素材入库（资信/业绩/人员/专利 → 素材卡片） | 素材库 + `index.yaml` |
-| `bid-draft` | 逐章起草 markdown（含 6 种内置图型配图），断点续作 | `chapters/*.md` + `figures/*.png` |
-| `bid-check` | 评分点覆盖率 / 废标风险 / 格式核对（`--fix` 自动修低风险项） | `check-report.md` |
+| `bid-draft` | **改写引擎**：有召回打底的章节按新招标要求微调修改历史真实稿（替换表 + 技术需求逐条差异核对 + 历史真实图落地），无召回才从零生成，断点续作 | `chapters/*.md` + `figures/*.png` |
+| `bid-check` | 评分点覆盖率 / 废标风险 / 格式核对 / **串味扫描**（`--fix` 自动修低风险项） | `check-report.md` |
 | `bid-export` | docx 终稿导出（标题层级/表格/目录/图片嵌入/待补高亮） | `技术文件.docx` |
 
 流水线：
 
 ```
-招标文件 → bid-parse → bid-outline(人工确认) → bid-draft → bid-check → bid-export → 技术文件.docx
-                          ▲                      ↑
-           company-knowledge(素材库) ────────────┘
+招标文件 → bid-parse → bid-outline(人工确认) → bid-recall(人工确认) → bid-draft(改写为主) → bid-check → bid-export → 技术文件.docx
+                          ▲                        ▲                    ↑
+           company-knowledge(素材库) ───────────────┼────────────────────┘
+                                 标书/历史标书/(人工真实投标稿，召回库) ─┘
 ```
+
+**起草哲学**：召回+复用为主——人写的真实投标稿是正文主体与技术深度的来源，AI 是编辑/适配器（按新招标要求替换旧值、逐条核对技术需求差异）；历史库覆盖不到的章节才从零生成。**图片内容以召回为主**（历史真实图+现场照片），不生成示意图。
 
 ## 快速开始
 
@@ -32,14 +36,18 @@
 git clone git@github.com:HUAN2022A/bid-skills.git
 cd bid-skills && pip install -r requirements.txt
 
-# 2. 把 6 个 skill 文件夹链接/复制到你的工具 skills 目录（见 INSTALL.md）
-#    ZCode: ~/.zcode/skills/   Claude Code: ~/.claude/skills/   Codex: ~/.codex/skills/
+# 2. 把 7 个 skill 文件夹链接/复制到你的工具 skills 目录（见 INSTALL.md）
+#    ZCode: ~/.zcode/skills/   Claude Code: ~/.claude/skills/   Codex CLI: ~/.codex/skills/
 
-# 3. 每个新标
+# 3. 准备召回库（可选但强烈建议）：把人工完成、真实投标过的历史标书 docx 放入 ~/Documents/标书/历史标书/
+#    python bid-recall/build_index.py   # 建索引（章节全文 md + 图片库，可删重建的缓存）
+
+# 4. 每个新标
 /bid-parse      # 解析招标文件 → 人工核对分析报告
-/bid-outline    # 生成大纲 → 人工审阅，status 改 confirmed（唯一确认点）
-/bid-draft      # 逐章起草（断点续作）
-/bid-check      # 自查（--fix 自动修低风险项）
+/bid-outline    # 生成大纲 → 人工审阅，status 改 confirmed（确认点一）
+/bid-recall     # 召回历史标书打底章节+图片 → 人工勾选确认（确认点二）
+/bid-draft      # 逐章改写（召回打底优先，断点续作）
+/bid-check      # 自查（含串味扫描；--fix 自动修低风险项）
 /bid-export     # 导出技术文件.docx 终稿
 ```
 

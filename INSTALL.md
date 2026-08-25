@@ -1,6 +1,6 @@
 # bid-skills 安装指南
 
-技术标书 skill 家族（6 个）：`bid-parse` → `bid-outline` → `bid-draft` → `bid-check` → `bid-export`，外加 `company-knowledge` 素材入库。详见 `SUMMARY.md`（项目总结）与 `README.md`（家族约定）。
+技术标书 skill 家族（7 个）：`bid-parse` → `bid-outline` → `bid-recall`（历史标书召回）→ `bid-draft`（改写引擎）→ `bid-check` → `bid-export`，外加 `company-knowledge` 素材入库。详见 `SUMMARY.md`（项目总结）与 `README.md`（家族约定）。
 
 ## 1. 环境要求
 
@@ -18,7 +18,7 @@
 
 ## 2. 安装 skill 到你的 AI 编程工具
 
-skill 采用通用 `SKILL.md` 格式（YAML frontmatter + 正文），把 6 个文件夹放进你工具的 skills 目录即可，可复制或软链：
+skill 采用通用 `SKILL.md` 格式（YAML frontmatter + 正文），把 7 个文件夹放进你工具的 skills 目录即可，可复制或软链：
 
 | 平台 | skills 目录 |
 |---|---|

@@ -311,6 +311,41 @@ def backup_chapters(ws):
     return dst
 
 
+def check_cross_contamination(chapters, ws):
+    """串味扫描：召回改写模式下，正文残留旧项目专有信息即报警（宁误报不漏报）。
+
+    词表来源：recall-pack 的 replacements[].old（旧项目名/业主/工期/数量等）
+    + 被引用历史文档文件名中的机构名（XX有限公司/发电厂等，即旧招标人）。
+    无 recall-pack 时跳过（纯生成模式无此风险面）。业绩叙述中的第三方项目名
+    不在词表内，不会误报；命中项需人工判断（若属合法引用可忽略）。
+    """
+    pack_path = ws / "recall-pack.yaml"
+    if not pack_path.is_file():
+        return None, []          # None = 本项目无召回改写，跳过
+    pack = yaml.safe_load(pack_path.read_text(encoding="utf-8")) or {}
+    words = set()
+    for r in pack.get("replacements") or []:
+        old = str(r.get("old") or "").strip()
+        if len(old) >= 4:
+            words.add(old)
+    docs = set()
+    for ch in pack.get("chapters") or []:
+        for h in (ch.get("text_hits") or []) + (ch.get("figure_hits") or []):
+            if h.get("doc"):
+                docs.add(str(h["doc"]))
+    for d in docs:
+        for m in re.findall(r"[一-鿿]{2,14}(?:有限公司|发电厂|股份公司|集团)", d):
+            words.add(m)
+    issues = []
+    for fn, info in chapters.items():
+        for w in sorted(words):
+            i = info["text"].find(w)
+            if i >= 0:
+                ctx = info["text"][max(0, i - 12):i + len(w) + 12].replace("\n", " ")
+                issues.append(f"{fn}：残留「{w}」…{ctx}…")
+    return "ok", issues
+
+
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -412,8 +447,22 @@ def main():
         print("- ✅ 未检测到报价信息混入")
     print()
 
-    # ── 5. 待补缺口 ──
-    print("## 五、[待补]缺口清单\n")
+    # ── 5. 串味扫描（召回改写残留）──
+    print("## 五、串味扫描（召回改写残留）\n")
+    cont_flag, cont_issues = check_cross_contamination(chapters, ws)
+    if cont_flag is None:
+        print("- 本项目无 recall-pack（纯生成模式），跳过串味扫描\n")
+    elif not cont_issues:
+        print("- ✅ 未检出旧项目专有信息残留\n")
+    else:
+        print(f"- ❌ 检出 {len(cont_issues)} 处旧项目信息残留（改写缺陷，必须处理；"
+              "若属业绩叙述合法引用可人工判定忽略）:")
+        for it in cont_issues:
+            print(f"  - {it}")
+        print()
+
+    # ── 6. 待补缺口 ──
+    print("## 六、[待补]缺口清单\n")
     total_pending = 0
     for fn, info in chapters.items():
         if info["pending"]:
@@ -423,7 +472,7 @@ def main():
     print(f"\n共 {total_pending} 个待补项。\n")
 
     # ── 6. 人工处理清单 ──
-    print("## 六、人工处理清单（商务/价格/资质，技术卷范围外）\n")
+    print("## 八、人工处理清单（商务/价格/资质，技术卷范围外）\n")
     biz = [it for it in (tender.get("scoring") or {}).get("items", []) if it.get("category") in ("商务", "价格", "资质")]
     for it in biz:
         print(f"- [{it.get('category')}] {it.get('item')}（{it.get('score')}分）")
@@ -433,7 +482,7 @@ def main():
     print()
 
     # ── 7. 低风险项自动修复（--fix）──
-    print("## 七、低风险项检查与自动修复\n")
+    print("## 九、低风险项检查与自动修复\n")
     checkers = [
         ("covers注释与大纲一致性", check_covers),
         ("文件名与大纲id一致性", check_filename_id),

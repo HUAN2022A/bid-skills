@@ -1,1 +1,5 @@
 bid-check/__pycache__/
+bid-recall/__pycache__/
+__pycache__/
+.zcode/
+*.zip
