@@ -33,7 +33,7 @@
 
 ```bash
 # 1. 获取代码
-git clone git@github.com:HUAN2022A/bid-skills.git
+git clone https://github.com/HUAN2022A/bid-skills.git
 cd bid-skills && pip install -r requirements.txt
 
 # 2. 把 7 个 skill 文件夹链接/复制到你的工具 skills 目录（见 INSTALL.md）
